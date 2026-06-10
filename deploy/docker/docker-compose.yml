@@ -1,0 +1,16 @@
+services:
+  nodebridge:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: nodebridge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - ../../configs/nodebridge.example.json:/etc/nodebridge/config.json:ro
+      - nodebridge-data:/var/lib/nodebridge
+
+volumes:
+  nodebridge-data:
+

@@ -1,0 +1,97 @@
+{
+  "server": {
+    "listen": "127.0.0.1:8088",
+    "token": "change-me"
+  },
+  "log": {
+    "level": "info"
+  },
+  "runtime": {
+    "work_dir": "var",
+    "sync_interval": "60s",
+    "request_timeout": "15s"
+  },
+  "kernels": [
+    {
+      "name": "sing-main",
+      "type": "sing-box",
+      "enabled": true,
+      "executable": "",
+      "config_path": "var/sing-main.json",
+      "version_policy": "pinned",
+      "target_version": "1.12",
+      "renderer": "sing-box-1.12",
+      "args": [],
+      "env": {}
+    },
+    {
+      "name": "xray-main",
+      "type": "xray",
+      "enabled": false,
+      "executable": "/usr/local/bin/xray",
+      "config_path": "var/xray-main.plan.json",
+      "version_policy": "stable",
+      "target_version": "",
+      "renderer": "xray-current",
+      "args": [],
+      "env": {}
+    }
+  ],
+  "panels": [
+    {
+      "name": "v2board-demo",
+      "type": "xboard",
+      "api_version": "v1",
+      "api_host": "https://panel.example.com",
+      "api_key": "",
+      "node_id": 1,
+      "node_type": "anytls",
+      "listen_ip": "0.0.0.0",
+      "enabled": false,
+      "subscribe": {
+        "url": "",
+        "format": ""
+      },
+      "cert": {
+        "mode": "file",
+        "domain": "example.com",
+        "cert_file": "/etc/nodebridge/fullchain.cer",
+        "key_file": "/etc/nodebridge/cert.key"
+      },
+      "headers": {
+        "User-Agent": "NodeBridge/0.1"
+      }
+    }
+  ],
+  "static_nodes": [
+    {
+      "id": "local-anytls-demo",
+      "name": "local-anytls-demo",
+      "protocol": "anytls",
+      "address": "example.com",
+      "listen_ip": "0.0.0.0",
+      "port": 8443,
+      "users": [
+        {
+          "id": 1,
+          "name": "demo",
+          "uuid": "demo-password",
+          "password": "demo-password"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "cert_file": "/etc/nodebridge/fullchain.cer",
+        "key_file": "/etc/nodebridge/cert.key"
+      },
+      "padding_scheme": [
+        "stop=8"
+      ],
+      "source": {
+        "type": "static",
+        "name": "config"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+bin/
+var/
+dist/
+*.exe
+*.log
+.env
+.idea/

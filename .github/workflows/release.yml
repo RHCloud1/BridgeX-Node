@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: nodebridge-linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: nodebridge-linux-arm64
+          - goos: windows
+            goarch: amd64
+            name: nodebridge-windows-amd64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+      - run: go test ./...
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist/${{ matrix.name }}/configs dist/${{ matrix.name }}/deploy
+          BIN=nodebridged
+          if [ "${{ matrix.goos }}" = "windows" ]; then BIN=nodebridged.exe; fi
+          go build -ldflags "-X main.version=${GITHUB_REF_NAME}" -o dist/${{ matrix.name }}/${BIN} ./cmd/nodebridged
+          cp configs/nodebridge.example.json dist/${{ matrix.name }}/configs/
+          cp deploy/nodebridge.sh deploy/install.sh dist/${{ matrix.name }}/deploy/
+          cp README.md dist/${{ matrix.name }}/
+          tar -czf dist/${{ matrix.name }}.tar.gz -C dist/${{ matrix.name }} .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/${{ matrix.name }}.tar.gz
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz
+
