@@ -56,16 +56,16 @@ install_base() {
   case "${OS_ID}" in
     debian|ubuntu)
       apt-get update -y
-      apt-get install -y curl wget tar ca-certificates
+      apt-get install -y curl wget tar unzip ca-certificates
       ;;
     centos|rhel|rocky|almalinux|fedora)
-      yum install -y curl wget tar ca-certificates
+      yum install -y curl wget tar unzip ca-certificates
       ;;
     alpine)
-      apk add --no-cache curl wget tar ca-certificates
+      apk add --no-cache curl wget tar unzip ca-certificates
       ;;
     arch)
-      pacman -Sy --noconfirm --needed curl wget tar ca-certificates
+      pacman -Sy --noconfirm --needed curl wget tar unzip ca-certificates
       ;;
     *)
       echo -e "${yellow}unknown distribution ${OS_ID}; skip base package install.${plain}"
@@ -130,6 +130,83 @@ choose_node_type() {
     4) NODE_TYPE="trojan" ;;
     5) NODE_TYPE="hysteria2" ;;
     *) NODE_TYPE="anytls" ;;
+  esac
+}
+
+latest_repo_tag() {
+  local repo="$1"
+  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
+    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
+    | head -n 1
+}
+
+latest_repo_tag_by_prefix() {
+  local repo="$1"
+  local prefix="$2"
+  curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=100" \
+    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
+    | grep -E "^v${prefix//./\\.}\\." \
+    | head -n 1
+}
+
+install_sing_box_core() {
+  local minor="${SING_BOX_MINOR:-1.12}"
+  local tag version asset url tmp extract
+  tag="$(latest_repo_tag_by_prefix SagerNet/sing-box "${minor}")"
+  if [[ -z "${tag}" ]]; then
+    echo -e "${yellow}cannot find sing-box ${minor}.x; falling back to latest stable.${plain}"
+    tag="$(latest_repo_tag SagerNet/sing-box)"
+  fi
+  version="${tag#v}"
+  asset="sing-box-${version}-linux-${ARCH}.tar.gz"
+  url="https://github.com/SagerNet/sing-box/releases/download/${tag}/${asset}"
+  tmp="/tmp/${asset}"
+  extract="/tmp/nodebridge-sing-box"
+  echo -e "${green}installing sing-box ${tag}${plain}"
+  rm -rf "${extract}"
+  mkdir -p "${extract}"
+  curl -fL "${url}" -o "${tmp}"
+  tar -xzf "${tmp}" -C "${extract}"
+  install -m 0755 "$(find "${extract}" -type f -name sing-box | head -n 1)" /usr/local/bin/sing-box
+  rm -rf "${tmp}" "${extract}"
+}
+
+install_xray_core() {
+  local tag xarch asset url tmp extract
+  tag="$(latest_repo_tag XTLS/Xray-core)"
+  case "${ARCH}" in
+    amd64) xarch="64" ;;
+    arm64) xarch="arm64-v8a" ;;
+    *) xarch="64" ;;
+  esac
+  asset="Xray-linux-${xarch}.zip"
+  url="https://github.com/XTLS/Xray-core/releases/download/${tag}/${asset}"
+  tmp="/tmp/${asset}"
+  extract="/tmp/nodebridge-xray"
+  echo -e "${green}installing Xray ${tag}${plain}"
+  rm -rf "${extract}"
+  mkdir -p "${extract}"
+  curl -fL "${url}" -o "${tmp}"
+  unzip -o "${tmp}" -d "${extract}" >/dev/null
+  install -m 0755 "${extract}/xray" /usr/local/bin/xray
+  rm -rf "${tmp}" "${extract}"
+}
+
+install_hysteria2_core() {
+  local tag asset url
+  tag="$(latest_repo_tag apernet/hysteria)"
+  asset="hysteria-linux-${ARCH}"
+  url="https://github.com/apernet/hysteria/releases/download/${tag}/${asset}"
+  echo -e "${green}installing Hysteria ${tag}${plain}"
+  curl -fL "${url}" -o /usr/local/bin/hysteria
+  chmod +x /usr/local/bin/hysteria
+}
+
+install_selected_core() {
+  case "${CORE_TYPE}" in
+    sing-box) install_sing_box_core ;;
+    xray) install_xray_core ;;
+    hysteria2) install_hysteria2_core ;;
   esac
 }
 
@@ -208,6 +285,7 @@ generate_config() {
   ]
 }
 EOF
+  install_selected_core
 }
 
 install_config() {
