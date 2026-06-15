@@ -8,34 +8,28 @@ CONFIG_DIR="${CONFIG_DIR:-/etc/nodebridge}"
 DATA_DIR="${DATA_DIR:-/var/lib/nodebridge}"
 SERVICE_FILE="/etc/systemd/system/nodebridge.service"
 VERSION="${1:-latest}"
+SING_BOX_MINOR="${SING_BOX_MINOR:-1.12}"
 
 red='\033[0;31m'
 green='\033[0;32m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
+OS_ID=""
+ARCH=""
+CORE_TYPE=""
+CORE_BIN=""
+CORE_CONFIG_FILE=""
+RENDERER=""
+NODE_TYPE=""
+PANELS_JSON=""
+HAS_ANYTLS=0
+
 need_root() {
   if [[ "${EUID}" -ne 0 ]]; then
-    echo -e "${red}error:${plain} run this script as root."
+    echo -e "${red}error:${plain} run as root."
     exit 1
   fi
-}
-
-show_help() {
-  cat <<EOF
-NodeBridge 一键安装脚本
-
-Usage:
-  bash install.sh [version]
-
-Examples:
-  bash install.sh
-  bash install.sh latest
-  bash install.sh v0.1.0
-
-环境变量可覆盖:
-  REPO_OWNER, REPO_NAME, INSTALL_DIR, CONFIG_DIR, DATA_DIR
-EOF
 }
 
 ask() {
@@ -49,6 +43,45 @@ ask() {
     read -r -p "${prompt}: " answer
     echo "${answer}"
   fi
+}
+
+ask_yes_no() {
+  local prompt="$1"
+  local default="${2:-n}"
+  local input
+  if [[ "${default}" == "y" ]]; then
+    read -r -p "${prompt} [Y/n]: " input
+    input="${input:-y}"
+  else
+    read -r -p "${prompt} [y/N]: " input
+    input="${input:-n}"
+  fi
+  case "${input,,}" in
+    y|yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+show_help() {
+  cat <<EOF
+NodeBridge installer
+
+Usage:
+  bash install.sh [version]
+
+Examples:
+  bash install.sh
+  bash install.sh latest
+  bash install.sh v0.1.0
+
+The installer generates ${CONFIG_DIR}/config.json interactively.
+Default panel type: xboard.
+EOF
+}
+
+json_escape() {
+  printf '%s' "$1" \
+    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\x0d//g' -e ':a;N;$!ba;s/\n/\\n/g'
 }
 
 detect_os() {
@@ -96,6 +129,22 @@ latest_release() {
     | head -n 1
 }
 
+latest_repo_tag() {
+  local repo="$1"
+  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
+    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
+    | head -n 1
+}
+
+latest_repo_tag_by_prefix() {
+  local repo="$1"
+  local prefix="$2"
+  curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=100" \
+    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
+    | { grep -E "^v${prefix//./\\.}\\." || true; } \
+    | head -n 1
+}
+
 download_nodebridge() {
   mkdir -p "${INSTALL_DIR}" "${CONFIG_DIR}" "${DATA_DIR}"
   local tag="${VERSION}"
@@ -117,61 +166,71 @@ download_nodebridge() {
 }
 
 choose_core() {
+  local choice
   echo "Core type:"
-  echo "  1) sing-box"
+  echo "  1) sing-box (recommended for AnyTLS)"
   echo "  2) xray"
   echo "  3) hysteria2"
-  local choice
   choice="$(ask "Select core" "1")"
   case "${choice}" in
-    2) CORE_TYPE="xray"; RENDERER="xray-current"; CORE_BIN="/usr/local/bin/xray"; CONFIG_FILE="${DATA_DIR}/xray-main.json" ;;
-    3) CORE_TYPE="hysteria2"; RENDERER="hysteria2-current"; CORE_BIN="/usr/local/bin/hysteria"; CONFIG_FILE="${DATA_DIR}/hysteria2-main.yaml" ;;
-    *) CORE_TYPE="sing-box"; RENDERER="sing-box-1.12"; CORE_BIN="/usr/local/bin/sing-box"; CONFIG_FILE="${DATA_DIR}/sing-main.json" ;;
+    2)
+      CORE_TYPE="xray"
+      RENDERER="xray-current"
+      CORE_BIN="/usr/local/bin/xray"
+      CORE_CONFIG_FILE="${DATA_DIR}/xray-main.json"
+      ;;
+    3)
+      CORE_TYPE="hysteria2"
+      RENDERER="hysteria2-current"
+      CORE_BIN="/usr/local/bin/hysteria"
+      CORE_CONFIG_FILE="${DATA_DIR}/hysteria2-main.yaml"
+      ;;
+    *)
+      CORE_TYPE="sing-box"
+      RENDERER="sing-box-1.12"
+      CORE_BIN="/usr/local/bin/sing-box"
+      CORE_CONFIG_FILE="${DATA_DIR}/sing-main.json"
+      ;;
   esac
 }
 
 choose_node_type() {
+  local choice
   echo "Node protocol:"
   echo "  1) shadowsocks"
   echo "  2) vless"
   echo "  3) vmess"
   echo "  4) trojan"
-  echo "  5) hysteria2"
-  echo "  6) anytls"
-  local choice
-  choice="$(ask "Select protocol" "6")"
+  echo "  5) hysteria"
+  echo "  6) hysteria2"
+  echo "  7) anytls"
+  echo "  8) tuic"
+  choice="$(ask "Select protocol" "7")"
   case "${choice}" in
     1) NODE_TYPE="shadowsocks" ;;
     2) NODE_TYPE="vless" ;;
     3) NODE_TYPE="vmess" ;;
     4) NODE_TYPE="trojan" ;;
-    5) NODE_TYPE="hysteria2" ;;
+    5) NODE_TYPE="hysteria" ;;
+    6) NODE_TYPE="hysteria2" ;;
+    7) NODE_TYPE="anytls" ;;
+    8) NODE_TYPE="tuic" ;;
     *) NODE_TYPE="anytls" ;;
   esac
 }
 
-latest_repo_tag() {
-  local repo="$1"
-  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
-    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
-    | head -n 1
-}
-
-latest_repo_tag_by_prefix() {
-  local repo="$1"
-  local prefix="$2"
-  curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=100" \
-    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
-    | grep -E "^v${prefix//./\\.}\\." \
-    | head -n 1
+node_type_needs_tls() {
+  case "$1" in
+    anytls|hysteria|hysteria2|trojan|tuic) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 install_sing_box_core() {
-  local minor="${SING_BOX_MINOR:-1.12}"
   local tag version asset url tmp extract
-  tag="$(latest_repo_tag_by_prefix SagerNet/sing-box "${minor}")"
+  tag="$(latest_repo_tag_by_prefix SagerNet/sing-box "${SING_BOX_MINOR}")"
   if [[ -z "${tag}" ]]; then
-    echo -e "${yellow}cannot find sing-box ${minor}.x; falling back to latest stable.${plain}"
+    echo -e "${yellow}cannot find sing-box ${SING_BOX_MINOR}.x; using latest stable.${plain}"
     tag="$(latest_repo_tag SagerNet/sing-box)"
   fi
   version="${tag#v}"
@@ -227,20 +286,124 @@ install_selected_core() {
   esac
 }
 
-generate_config() {
-  local api_host api_key node_id api_version cert_domain cert_file key_file token listen
-  echo -e "${yellow}NodeBridge first-run config wizard${plain}"
-  api_host="$(ask "Panel URL, for example https://panel.example.com")"
-  api_key="$(ask "Panel server API key")"
-  node_id="$(ask "Node ID" "1")"
-  api_version="$(ask "Panel API version: v1 for V2Board/XBoard compatible, v2 for new XBoard" "v1")"
+append_panel_json() {
+  local panel_json="$1"
+  if [[ -z "${PANELS_JSON}" ]]; then
+    PANELS_JSON="${panel_json}"
+  else
+    PANELS_JSON+=$',\n'
+    PANELS_JSON+="${panel_json}"
+  fi
+}
+
+collect_nodes() {
+  PANELS_JSON=""
+  HAS_ANYTLS=0
+  local idx=1
+  local reuse_api="n"
+  local reuse_api_host=""
+  local reuse_api_key=""
+
+  if ask_yes_no "Reuse same panel URL and API key for multiple nodes?" "n"; then
+    reuse_api="y"
+    reuse_api_host="$(ask "Panel URL" "https://panel.example.com")"
+    reuse_api_key="$(ask "API key")"
+  fi
+
+  while true; do
+    local panel_name api_host api_key node_id api_version listen_ip subscribe_url subscribe_format
+    local cert_domain cert_file key_file panel_json
+    panel_name="$(ask "Node name" "main-panel${idx}")"
+    if [[ "${reuse_api}" == "y" ]]; then
+      api_host="${reuse_api_host}"
+      api_key="${reuse_api_key}"
+    else
+      api_host="$(ask "Panel URL, for example https://panel.example.com")"
+      api_key="$(ask "API key")"
+    fi
+    node_id="$(ask "Node ID" "${idx}")"
+    if ! [[ "${node_id}" =~ ^[0-9]+$ ]]; then
+      echo -e "${red}node_id must be a number.${plain}"
+      exit 1
+    fi
+    api_version="$(ask "Panel API version (v1/v2)" "v1")"
+    listen_ip="$(ask "Listen IP" "0.0.0.0")"
+
+    choose_node_type
+    if [[ "${NODE_TYPE}" == "anytls" ]]; then
+      HAS_ANYTLS=1
+    fi
+
+    subscribe_url="$(ask "Subscription URL, leave empty to use panel node API" "")"
+    if [[ -n "${subscribe_url}" ]]; then
+      subscribe_format="$(ask "Subscription format" "xboard")"
+    else
+      subscribe_format=""
+    fi
+
+    if node_type_needs_tls "${NODE_TYPE}"; then
+      cert_domain="$(ask "TLS certificate domain" "example.com")"
+      cert_file="$(ask "Certificate file path" "${CONFIG_DIR}/fullchain.cer")"
+      key_file="$(ask "Private key file path" "${CONFIG_DIR}/cert.key")"
+    else
+      cert_domain=""
+      cert_file=""
+      key_file=""
+    fi
+
+    panel_json="$(cat <<EOF
+    {
+      "name": "$(json_escape "${panel_name}")",
+      "type": "xboard",
+      "api_version": "$(json_escape "${api_version}")",
+      "api_host": "$(json_escape "${api_host}")",
+      "api_key": "$(json_escape "${api_key}")",
+      "node_id": ${node_id},
+      "node_type": "$(json_escape "${NODE_TYPE}")",
+      "listen_ip": "$(json_escape "${listen_ip}")",
+      "enabled": true,
+      "subscribe": {
+        "url": "$(json_escape "${subscribe_url}")",
+        "format": "$(json_escape "${subscribe_format}")"
+      },
+      "cert": {
+        "mode": "file",
+        "domain": "$(json_escape "${cert_domain}")",
+        "cert_file": "$(json_escape "${cert_file}")",
+        "key_file": "$(json_escape "${key_file}")"
+      },
+      "headers": {
+        "User-Agent": "NodeBridge/0.1"
+      }
+    }
+EOF
+)"
+    append_panel_json "${panel_json}"
+
+    idx=$((idx + 1))
+    if ! ask_yes_no "Add another node?" "n"; then
+      break
+    fi
+  done
+}
+
+rewrite_config() {
+  local listen token sync_interval request_timeout
+  mkdir -p "${CONFIG_DIR}" "${DATA_DIR}"
   listen="$(ask "NodeBridge API listen address" "127.0.0.1:8088")"
-  token="$(ask "NodeBridge local API token" "change-me-$(date +%s)")"
-  choose_core
-  choose_node_type
-  cert_domain="$(ask "TLS certificate domain" "example.com")"
-  cert_file="$(ask "Certificate file path" "${CONFIG_DIR}/fullchain.cer")"
-  key_file="$(ask "Private key file path" "${CONFIG_DIR}/cert.key")"
+  token="$(ask "NodeBridge API token" "change-me-$(date +%s)")"
+  sync_interval="$(ask "Sync interval" "60s")"
+  request_timeout="$(ask "Request timeout" "15s")"
+
+  collect_nodes
+
+  if [[ "${HAS_ANYTLS}" == "1" && "${CORE_TYPE}" != "sing-box" ]]; then
+    echo -e "${yellow}AnyTLS requires sing-box. Switching core to sing-box.${plain}"
+    CORE_TYPE="sing-box"
+    RENDERER="sing-box-1.12"
+    CORE_BIN="/usr/local/bin/sing-box"
+    CORE_CONFIG_FILE="${DATA_DIR}/sing-main.json"
+  fi
 
   if [[ -f "${CONFIG_DIR}/config.json" ]]; then
     cp "${CONFIG_DIR}/config.json" "${CONFIG_DIR}/config.json.bak.$(date +%s)"
@@ -249,75 +412,59 @@ generate_config() {
   cat > "${CONFIG_DIR}/config.json" <<EOF
 {
   "server": {
-    "listen": "${listen}",
-    "token": "${token}"
+    "listen": "$(json_escape "${listen}")",
+    "token": "$(json_escape "${token}")"
   },
   "log": {
     "level": "info"
   },
   "runtime": {
-    "work_dir": "${DATA_DIR}",
-    "sync_interval": "60s",
-    "request_timeout": "15s"
+    "work_dir": "$(json_escape "${DATA_DIR}")",
+    "sync_interval": "$(json_escape "${sync_interval}")",
+    "request_timeout": "$(json_escape "${request_timeout}")"
   },
   "kernels": [
     {
       "name": "${CORE_TYPE}-main",
       "type": "${CORE_TYPE}",
       "enabled": true,
-      "executable": "${CORE_BIN}",
-      "config_path": "${CONFIG_FILE}",
+      "executable": "$(json_escape "${CORE_BIN}")",
+      "config_path": "$(json_escape "${CORE_CONFIG_FILE}")",
       "version_policy": "pinned",
-      "target_version": "1.12",
+      "target_version": "${SING_BOX_MINOR}",
       "renderer": "${RENDERER}",
       "args": [],
       "env": {}
     }
   ],
   "panels": [
-    {
-      "name": "main-panel",
-      "type": "xboard",
-      "api_version": "${api_version}",
-      "api_host": "${api_host}",
-      "api_key": "${api_key}",
-      "node_id": ${node_id},
-      "node_type": "${NODE_TYPE}",
-      "listen_ip": "0.0.0.0",
-      "enabled": true,
-      "subscribe": {
-        "url": "",
-        "format": ""
-      },
-      "cert": {
-        "mode": "file",
-        "domain": "${cert_domain}",
-        "cert_file": "${cert_file}",
-        "key_file": "${key_file}"
-      },
-      "headers": {
-        "User-Agent": "NodeBridge/0.1"
-      }
-    }
+${PANELS_JSON}
   ]
 }
 EOF
-  install_selected_core
+
+  if ask_yes_no "Install or update selected external core now?" "y"; then
+    install_selected_core
+  fi
 }
 
 install_config() {
-  if [[ "${NODEBRIDGE_REGENERATE:-0}" == "1" ]]; then
-    generate_config
+  if [[ "${NODEBRIDGE_REGENERATE:-0}" == "1" || ! -f "${CONFIG_DIR}/config.json" ]]; then
+    choose_core
+    rewrite_config
     return
   fi
-  if [[ -f "${CONFIG_DIR}/config.json" ]]; then
-    local regen
-    regen="$(ask "Existing config found. Regenerate it" "n")"
-    if [[ "${regen}" =~ ^[Yy]$ ]]; then
-      generate_config
-    fi
-  else
-    generate_config
+
+  if ask_yes_no "Existing config found. Regenerate it?" "n"; then
+    choose_core
+    rewrite_config
+    return
+  fi
+
+  echo -e "${yellow}keep existing config.${plain}"
+  if ask_yes_no "Install or update external core only?" "n"; then
+    choose_core
+    install_selected_core
   fi
 }
 
@@ -346,11 +493,13 @@ EOF
 
 install_manager() {
   if [[ -f "${INSTALL_DIR}/deploy/nodebridge.sh" ]]; then
-    cp "${INSTALL_DIR}/deploy/nodebridge.sh" /usr/bin/nodebridge
+    install -m 0755 "${INSTALL_DIR}/deploy/nodebridge.sh" /usr/bin/nodebridge
+  elif [[ -f "deploy/nodebridge.sh" ]]; then
+    install -m 0755 "deploy/nodebridge.sh" /usr/bin/nodebridge
   else
-    cp deploy/nodebridge.sh /usr/bin/nodebridge
+    curl -fsSL "https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/master/deploy/nodebridge.sh" -o /usr/bin/nodebridge
+    chmod +x /usr/bin/nodebridge
   fi
-  chmod +x /usr/bin/nodebridge
 }
 
 main() {
@@ -358,6 +507,7 @@ main() {
     show_help
     return 0
   fi
+
   need_root
   detect_os
   detect_arch
@@ -367,7 +517,12 @@ main() {
   install_service
   install_manager
   systemctl restart nodebridge || true
-  echo -e "${green}done. Use: nodebridge status | nodebridge log | nodebridge config | nodebridge update${plain}"
+  echo -e "${green}done.${plain}"
+  echo "- menu: nodebridge"
+  echo "- status: nodebridge status"
+  echo "- logs: nodebridge log"
+  echo "- regenerate config: nodebridge generate"
+  echo "- update: nodebridge update"
 }
 
 main "$@"
