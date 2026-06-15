@@ -492,13 +492,15 @@ EOF
 }
 
 install_manager() {
-  if [[ -f "${INSTALL_DIR}/deploy/nodebridge.sh" ]]; then
+  local manager_url="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/master/deploy/nodebridge.sh"
+  if curl -fsSL "${manager_url}" -o /usr/bin/nodebridge; then
+    chmod +x /usr/bin/nodebridge
+  elif [[ -f "${INSTALL_DIR}/deploy/nodebridge.sh" ]]; then
     install -m 0755 "${INSTALL_DIR}/deploy/nodebridge.sh" /usr/bin/nodebridge
   elif [[ -f "deploy/nodebridge.sh" ]]; then
     install -m 0755 "deploy/nodebridge.sh" /usr/bin/nodebridge
   else
-    curl -fsSL "https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/master/deploy/nodebridge.sh" -o /usr/bin/nodebridge
-    chmod +x /usr/bin/nodebridge
+    echo -e "${yellow}cannot install nodebridge manager command.${plain}"
   fi
 }
 
