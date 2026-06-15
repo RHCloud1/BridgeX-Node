@@ -1,0 +1,28 @@
+HTTP/1.1 400 Bad Request
+Date: Mon, 15 Jun 2026 19:35:12 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 160
+X-OAuth-Scopes: admin:enterprise, admin:gpg_key, admin:org, admin:org_hook, admin:public_key, admin:repo_hook, admin:ssh_signing_key, audit_log, codespace, copilot, delete:packages, delete_repo, gist, notifications, project, repo, user, workflow, write:discussion, write:network_configurations, write:packages
+X-Accepted-OAuth-Scopes: public_repo, repo
+X-GitHub-Media-Type: github.v3; format=json
+Deprecation: Tue, 10 Mar 2026 00:00:00 GMT
+Sunset: Fri, 10 Mar 2028 00:00:00 GMT
+Link: <https://docs.github.com/en/rest/about-the-rest-api/api-versions>; rel="deprecation"; type="text/html"
+x-github-api-version-selected: 2022-11-28
+Access-Control-Expose-Headers: ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset, Warning
+Access-Control-Allow-Origin: *
+Strict-Transport-Security: max-age=31536000; includeSubdomains; preload
+X-Frame-Options: deny
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Referrer-Policy: origin-when-cross-origin, strict-origin-when-cross-origin
+Content-Security-Policy: default-src 'none'
+Vary: Accept-Encoding, Accept, X-Requested-With
+Server: github.com
+X-RateLimit-Limit: 5000
+X-RateLimit-Remaining: 4993
+X-RateLimit-Reset: 1781555644
+X-RateLimit-Used: 7
+X-RateLimit-Resource: core
+X-GitHub-Request-Id: 4319:2F9E9A:4622F:4E3C9:6A3053F0
+
