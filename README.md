@@ -31,6 +31,26 @@ go test ./...
 go run ./cmd/nodebridged -config configs/nodebridge.example.json
 ```
 
+## 快速上手（推荐）
+
+```bash
+# 一键安装（Linux）
+bash <(curl -fsSL https://raw.githubusercontent.com/RHCloud1/BridgeX-Node/master/deploy/install.sh)
+
+# 常用运维命令
+nodebridge status
+nodebridge log
+nodebridge config
+nodebridge update
+nodebridge generate
+```
+
+说明：
+- 安装完成后会安装 `nodebridge` 管理命令（通常在 `/usr/bin/nodebridge`）。
+- `deploy/nodebridge.sh` 内置了 `start/stop/restart/status/log/config/update/version/generate/help` 常用动作。
+- 安装脚本默认仓库为 `RHCloud1/BridgeX-Node`，如需改到自定义仓库可设置 `REPO_OWNER`、`REPO_NAME` 环境变量。
+
+
 API examples:
 
 ```bash
@@ -67,4 +87,3 @@ docs/                   architecture and deployment notes
 3. Add V2Board node API support for node info, user list, traffic report, and online IP report.
 4. Persist registry snapshots to disk or SQLite so restarts keep the last known node state.
 5. Add admin UI or CLI for import testing, renderer preview, and hot reload.
-

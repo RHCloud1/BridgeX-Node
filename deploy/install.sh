@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_OWNER="${REPO_OWNER:-your-org}"
-REPO_NAME="${REPO_NAME:-nodebridge}"
+REPO_OWNER="${REPO_OWNER:-RHCloud1}"
+REPO_NAME="${REPO_NAME:-BridgeX-Node}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/nodebridge}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/nodebridge}"
 DATA_DIR="${DATA_DIR:-/var/lib/nodebridge}"
@@ -19,6 +19,23 @@ need_root() {
     echo -e "${red}error:${plain} run this script as root."
     exit 1
   fi
+}
+
+show_help() {
+  cat <<EOF
+NodeBridge 一键安装脚本
+
+Usage:
+  bash install.sh [version]
+
+Examples:
+  bash install.sh
+  bash install.sh latest
+  bash install.sh v0.1.0
+
+环境变量可覆盖:
+  REPO_OWNER, REPO_NAME, INSTALL_DIR, CONFIG_DIR, DATA_DIR
+EOF
 }
 
 ask() {
@@ -328,11 +345,19 @@ EOF
 }
 
 install_manager() {
-  cp "${INSTALL_DIR}/deploy/nodebridge.sh" /usr/bin/nodebridge
+  if [[ -f "${INSTALL_DIR}/deploy/nodebridge.sh" ]]; then
+    cp "${INSTALL_DIR}/deploy/nodebridge.sh" /usr/bin/nodebridge
+  else
+    cp deploy/nodebridge.sh /usr/bin/nodebridge
+  fi
   chmod +x /usr/bin/nodebridge
 }
 
 main() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_help
+    return 0
+  fi
   need_root
   detect_os
   detect_arch
